@@ -122,6 +122,16 @@ let appointments = loadAppointments();
 const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(appointments));
 const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const dateLabel = value => new Intl.DateTimeFormat('es-CO',{day:'2-digit',month:'short',year:'numeric'}).format(new Date(`${value}T12:00:00`));
+const normalizeProfessional = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('es');
+function hasScheduleConflict(candidate) {
+  return appointments.some(appointment =>
+    appointment.id !== candidate.id &&
+    appointment.userEmail === candidate.userEmail &&
+    appointment.date === candidate.date &&
+    appointment.time === candidate.time &&
+    normalizeProfessional(appointment.doctor) === normalizeProfessional(candidate.doctor)
+  );
+}
 function remainingLabel(appointment) {
   const target = new Date(`${appointment.date}T${appointment.time}:00`).getTime();
   const delta = target - Date.now();
@@ -177,8 +187,7 @@ form.addEventListener('submit',e=>{
   const data=new FormData(form);
   const appointment={id:editingAppointmentId||crypto.randomUUID(),userEmail:currentUser.email,patient:data.get('patient').trim(),specialty:data.get('specialty'),doctor:data.get('doctor').trim(),date:data.get('date'),time:data.get('time'),notes:data.get('notes').trim(),status:'Pendiente'};
   if(appointment.date<localToday){document.querySelector('#form-error').textContent='Selecciona una fecha de hoy o posterior.';return;}
-  const duplicate=appointments.some(a=>a.id!==editingAppointmentId&&a.userEmail===currentUser.email&&a.date===appointment.date&&a.time===appointment.time&&a.doctor.toLocaleLowerCase()===appointment.doctor.toLocaleLowerCase());
-  if(duplicate){document.querySelector('#form-error').textContent='Ese profesional ya tiene una cita a esa hora.';return;}
+  if(hasScheduleConflict(appointment)){document.querySelector('#form-error').textContent='Ese profesional ya tiene una cita a esa hora.';return;}
   if(editingAppointmentId)appointments=appointments.map(a=>a.id===editingAppointmentId&&a.userEmail===currentUser.email?{...a,...appointment}:a);else appointments.push(appointment);
   editingAppointmentId=null;save();render();dialog.close();
 });
