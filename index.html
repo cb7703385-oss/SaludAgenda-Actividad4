@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f766e" />
+  <title>SaludAgenda | Gestión de citas médicas</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main id="auth-screen" class="auth-screen">
+    <section class="auth-card">
+      <a class="brand auth-brand" href="#"><span class="brand-mark">+</span><span>Salud<span class="brand-light">Agenda</span><small>GESTIÓN MÉDICA</small></span></a>
+      <div class="auth-intro"><p class="eyebrow">BIENVENIDO</p><h1 id="auth-title">Inicia sesión</h1><p id="auth-subtitle" class="muted">Ingresa para administrar tus citas médicas.</p></div>
+      <form id="login-form" class="auth-form">
+        <label>Correo electrónico<input name="email" type="email" autocomplete="email" required placeholder="nombre@correo.com" /></label>
+        <label>Contraseña<span class="password-wrap"><input name="password" type="password" autocomplete="current-password" required minlength="6" placeholder="Mínimo 6 caracteres" /><button class="password-toggle" type="button" aria-label="Mostrar contraseña" aria-pressed="false">◉</button></span></label>
+        <p id="login-error" class="form-error" role="alert"></p>
+        <button class="primary auth-submit" type="submit">Iniciar sesión</button>
+      </form>
+      <form id="register-form" class="auth-form" hidden>
+        <label>Nombre completo<input name="name" autocomplete="name" required maxlength="70" placeholder="Tu nombre" /></label>
+        <label>Correo electrónico<input name="email" type="email" autocomplete="email" required placeholder="nombre@correo.com" /></label>
+        <label>Contraseña<span class="password-wrap"><input name="password" type="password" autocomplete="new-password" required minlength="6" placeholder="Mínimo 6 caracteres" /><button class="password-toggle" type="button" aria-label="Mostrar contraseña" aria-pressed="false">◉</button></span></label>
+        <p class="storage-notice">Cuenta de demostración: se guarda en este navegador.</p>
+        <p id="register-error" class="form-error" role="alert"></p>
+        <button class="primary auth-submit" type="submit">Crear cuenta</button>
+      </form>
+      <p class="auth-switch"><span id="switch-prompt">¿No tienes una cuenta?</span> <button type="button" id="switch-auth">Regístrate</button></p>
+    </section>
+  </main>
+  <div id="app-shell" hidden>
+  <header class="topbar">
+    <a class="brand" href="#inicio" aria-label="SaludAgenda, inicio"><span class="brand-mark">+</span><span>Salud<span class="brand-light">Agenda</span><small>GESTIÓN MÉDICA</small></span></a>
+    <nav><a class="active" href="#inicio" data-view="summary">Resumen</a><a href="#citas" data-view="appointments">Citas</a></nav>
+    <span class="user-chip"><span class="avatar" id="user-avatar">C</span><span id="user-name">Consultorio demo</span><button id="logout" class="logout">Salir</button></span>
+  </header>
+  <main id="inicio" class="page">
+    <section class="welcome"><div><p class="eyebrow">PANEL DE CONTROL</p><h1>Agenda de citas</h1><p class="muted">Organiza las consultas de tu consultorio en un solo lugar.</p></div><button class="primary" id="new-appointment">＋ Nueva cita</button></section>
+    <section class="stats" aria-label="Resumen de citas">
+      <article class="stat-card"><span class="stat-icon teal">▦</span><div><span class="stat-label">Citas de hoy</span><strong id="today-count">0</strong></div></article>
+      <article class="stat-card"><span class="stat-icon blue">◷</span><div><span class="stat-label">Pendientes</span><strong id="pending-count">0</strong></div></article>
+      <article class="stat-card"><span class="stat-icon green">✓</span><div><span class="stat-label">Confirmadas</span><strong id="confirmed-count">0</strong></div></article>
+    </section>
+    <section id="citas" class="appointments panel">
+      <div class="section-head"><div><h2>Próximas citas</h2><p class="muted">Consulta, confirma o cancela las citas registradas.</p></div><label class="search">⌕ <input id="search" type="search" placeholder="Buscar paciente…" /></label></div>
+      <div class="table-wrap"><table><thead><tr><th>PACIENTE</th><th>ESPECIALIDAD</th><th>FECHA Y HORA</th><th>TIEMPO RESTANTE</th><th>ESTADO</th><th></th></tr></thead><tbody id="appointment-list"></tbody></table><div id="empty" class="empty"><span>▦</span><strong>Aún no hay citas</strong><p>Registra la primera cita para comenzar.</p><button class="primary small" id="empty-new">＋ Crear cita</button></div></div>
+    </section>
+    <footer>SaludAgenda <span>•</span> Prototipo académico — datos guardados en este navegador</footer>
+  </main>
+  <dialog id="appointment-dialog"><form id="appointment-form" method="dialog"><div class="dialog-head"><div><p class="eyebrow">NUEVO REGISTRO</p><h2>Agendar una cita</h2></div><button class="icon-button" type="button" id="close-dialog" aria-label="Cerrar">×</button></div><label>Nombre del paciente<input name="patient" required maxlength="70" placeholder="Ej. Laura Gómez" /></label><div class="form-row"><label>Especialidad<select name="specialty" required><option value="">Seleccionar</option><option>Medicina general</option><option>Odontología</option><option>Psicología</option><option>Pediatría</option><option>Dermatología</option></select></label><label>Profesional<select name="doctor" required disabled><option value="">Primero elige especialidad</option></select></label></div><div class="form-row"><label>Fecha<input name="date" type="date" required /></label><label>Hora<input name="time" type="time" required /></label></div><label>Observaciones <span class="optional">(opcional)</span><textarea name="notes" rows="2" maxlength="180" placeholder="Información adicional"></textarea></label><p id="form-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-dialog">Cancelar</button><button type="submit" class="primary">Guardar cita</button></div></form></dialog>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
