@@ -6,7 +6,7 @@ Prototipo académico de una agenda web para consultorios médicos. Permite regis
 
 Abre `index.html` en un navegador moderno. No requiere instalar programas ni configurar una base de datos.
 
-## Historias de usuario propuestas
+## Historias de usuario implementadas
 
 1. Como paciente, quiero registrar una cita indicando especialidad, profesional, fecha y hora.
 2. Como usuario, quiero consultar y buscar citas para encontrar rápidamente la información.
