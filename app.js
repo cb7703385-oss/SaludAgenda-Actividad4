@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'saludagenda.appointments.v1';
+const MEDICAL_RECORDS_KEY = 'saludagenda.medicalRecords.v1';
 const USERS_KEY = 'saludagenda.users.v1';
 const SESSION_KEY = 'saludagenda.session.v1';
 const authScreen = document.querySelector('#auth-screen');
@@ -9,6 +10,7 @@ let authMode = 'login';
 let currentUser = null;
 function setView(view) {
   appShell.classList.toggle('appointments-only', view === 'appointments');
+  appShell.classList.toggle('histories-only', view === 'histories');
   document.querySelectorAll('.topbar nav a[data-view]').forEach(link => {
     const active = link.dataset.view === view;
     link.classList.toggle('active', active);
@@ -16,6 +18,7 @@ function setView(view) {
     else link.removeAttribute('aria-current');
   });
   if (view === 'appointments') document.querySelector('#citas').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  else if (view === 'histories') document.querySelector('#historias').scrollIntoView({ behavior: 'smooth', block: 'start' });
   else window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 document.querySelectorAll('.topbar nav a[data-view]').forEach(link => {
@@ -36,7 +39,7 @@ function showApp(user) {
   appShell.hidden = false;
   document.querySelector('#user-name').textContent = user.name;
   document.querySelector('#user-avatar').textContent = user.name.trim().charAt(0).toUpperCase();
-  setView(location.hash === '#citas' ? 'appointments' : 'summary');
+  setView(location.hash === '#citas' ? 'appointments' : location.hash === '#historias' ? 'histories' : 'summary');
   render();
 }
 function showAuth() {
@@ -101,6 +104,8 @@ document.querySelector('#logout').addEventListener('click', () => {
 });
 const form = document.querySelector('#appointment-form');
 const dialog = document.querySelector('#appointment-dialog');
+const medicalRecordForm = document.querySelector('#medical-record-form');
+const medicalRecordDialog = document.querySelector('#medical-record-dialog');
 const dateInput = form.elements.date;
 const doctorSelect = form.elements.doctor;
 const doctorsBySpecialty = {
@@ -118,7 +123,22 @@ function loadAppointments() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
   catch { return []; }
 }
+function loadMedicalRecords() {
+  try {
+    const records = JSON.parse(localStorage.getItem(MEDICAL_RECORDS_KEY) || '[]');
+    if (!Array.isArray(records)) throw new TypeError('El almacenamiento de expedientes no contiene una lista.');
+    return records;
+  } catch (error) {
+    console.error('No se pudieron cargar los expedientes médicos.', error);
+    const storageError = document.querySelector('#medical-record-storage-error');
+    storageError.textContent = 'No se pudieron cargar los expedientes guardados. No se podrán agregar nuevos registros para evitar sobrescribir los datos.';
+    storageError.hidden = false;
+    document.querySelector('#new-medical-record').disabled = true;
+    return [];
+  }
+}
 let appointments = loadAppointments();
+let medicalRecords = loadMedicalRecords();
 const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(appointments));
 const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const dateLabel = value => new Intl.DateTimeFormat('es-CO',{day:'2-digit',month:'short',year:'numeric'}).format(new Date(`${value}T12:00:00`));
@@ -161,6 +181,22 @@ function render() {
   document.querySelector('#today-count').textContent=ownAppointments.filter(a=>a.date===localToday).length;
   document.querySelector('#pending-count').textContent=ownAppointments.filter(a=>a.status==='Pendiente').length;
   document.querySelector('#confirmed-count').textContent=ownAppointments.filter(a=>a.status==='Confirmada').length;
+  const pastConsultations = sorted.filter(a => new Date(`${a.date}T${a.time}:00`).getTime() <= Date.now()).reverse();
+  document.querySelector('#history-list').innerHTML = pastConsultations.map(a => `<article class="history-card">
+    <div class="history-card-head"><div><h3>${escapeHtml(a.patient)}</h3><p>${escapeHtml(a.specialty)} <span>•</span> ${escapeHtml(a.doctor)}</p></div><time datetime="${escapeHtml(a.date)}T${escapeHtml(a.time)}">${dateLabel(a.date)} · ${escapeHtml(a.time)}</time></div>
+    <div class="history-notes"><strong>Observaciones</strong><p>${escapeHtml(a.notes?.trim() || 'Sin observaciones registradas.')}</p></div>
+  </article>`).join('');
+  document.querySelector('#history-empty').classList.toggle('visible', pastConsultations.length === 0);
+  const ownMedicalRecords = medicalRecords
+    .filter(record => record.userEmail === currentUser.email)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  document.querySelector('#medical-record-list').innerHTML = ownMedicalRecords.map(record => `<article class="medical-record-card">
+    <div class="history-card-head"><h4>${escapeHtml(record.patient)}</h4><time datetime="${escapeHtml(record.date)}">${dateLabel(record.date)}</time></div>
+    <div class="medical-record-detail"><strong>Diagnóstico</strong><p>${escapeHtml(record.diagnosis)}</p></div>
+    <div class="medical-record-detail"><strong>Tratamiento</strong><p>${escapeHtml(record.treatment)}</p></div>
+    <div class="medical-record-detail"><strong>Observaciones</strong><p>${escapeHtml(record.notes?.trim() || 'Sin observaciones registradas.')}</p></div>
+  </article>`).join('');
+  document.querySelector('#medical-record-empty').classList.toggle('visible', ownMedicalRecords.length === 0);
 }
 function updateDoctors(){
   const specialty=form.elements.specialty.value;
@@ -181,6 +217,45 @@ document.querySelector('#empty-new').addEventListener('click',openDialog);
 document.querySelector('#close-dialog').addEventListener('click',()=>dialog.close());
 document.querySelector('#cancel-dialog').addEventListener('click',()=>dialog.close());
 dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close();});
+function openMedicalRecordDialog() {
+  medicalRecordForm.reset();
+  document.querySelector('#medical-record-error').textContent = '';
+  medicalRecordForm.elements.date.max = localToday;
+  medicalRecordDialog.showModal();
+  medicalRecordForm.elements.patient.focus();
+}
+document.querySelector('#new-medical-record').addEventListener('click', openMedicalRecordDialog);
+document.querySelector('#close-medical-record-dialog').addEventListener('click', () => medicalRecordDialog.close());
+document.querySelector('#cancel-medical-record-dialog').addEventListener('click', () => medicalRecordDialog.close());
+medicalRecordDialog.addEventListener('click', event => { if (event.target === medicalRecordDialog) medicalRecordDialog.close(); });
+medicalRecordForm.addEventListener('submit', event => {
+  event.preventDefault();
+  const data = new FormData(medicalRecordForm);
+  const record = {
+    id: crypto.randomUUID(),
+    userEmail: currentUser.email,
+    patient: data.get('patient').trim(),
+    date: data.get('date'),
+    diagnosis: data.get('diagnosis').trim(),
+    treatment: data.get('treatment').trim(),
+    notes: data.get('notes').trim(),
+  };
+  if (record.date > localToday) {
+    document.querySelector('#medical-record-error').textContent = 'La fecha de atención no puede ser futura.';
+    return;
+  }
+  const updatedRecords = [...medicalRecords, record];
+  try {
+    localStorage.setItem(MEDICAL_RECORDS_KEY, JSON.stringify(updatedRecords));
+  } catch (error) {
+    console.error('No se pudo guardar el expediente médico.', error);
+    document.querySelector('#medical-record-error').textContent = 'No se pudo guardar el expediente. Verifica el espacio disponible en el navegador e inténtalo de nuevo.';
+    return;
+  }
+  medicalRecords = updatedRecords;
+  render();
+  medicalRecordDialog.close();
+});
 document.querySelector('#search').addEventListener('input',render);
 form.addEventListener('submit',e=>{
   e.preventDefault();

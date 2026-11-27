@@ -14,8 +14,8 @@ Abre `index.html` en un navegador moderno. No requiere instalar programas ni con
 4. Como personal del consultorio, quiero cancelar citas para mantener la agenda actualizada.
 5. Como consultorio, quiero evitar dos citas del mismo profesional a la misma hora para prevenir cruces en la agenda.
 
-La plataforma también permite consultar y buscar citas.
+La plataforma también permite consultar y buscar citas, ver las consultas anteriores y agregar expedientes médicos con diagnóstico, tratamiento y observaciones.
 
 ## Consideraciones
 
-Es una demostración académica: las cuentas y las citas se guardan localmente en el navegador y no se sincronizan entre dispositivos ni se envían a un servidor. No debe utilizarse para almacenar información clínica real.
+Es una demostración académica: las cuentas, citas y expedientes se guardan localmente en el navegador y no se sincronizan entre dispositivos ni se envían a un servidor. No debe utilizarse para almacenar información clínica real.
