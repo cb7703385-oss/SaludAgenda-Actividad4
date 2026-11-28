@@ -235,20 +235,65 @@ function updateDoctors(selectedDoctor = ''){
 let editingAppointmentId = null;
 function openDialog(appointment = null){
   document.querySelector('#form-error').textContent='';form.reset();editingAppointmentId=appointment?.id??null;updateDoctors();dateInput.min=localDate(new Date());
-  if(appointment){patientInput.value=appointment.patient;specialtySelect.value=appointment.specialty;updateDoctors(appointment.doctor);dateInput.value=appointment.date;timeInput.value=appointment.time;form.elements.notes.value=appointment.notes||'';document.querySelector('#appointment-dialog h2').textContent='Editar cita';form.querySelector('button[type="submit"]').textContent='Guardar cambios';}
-  else{document.querySelector('#appointment-dialog h2').textContent='Agendar una cita';form.querySelector('button[type="submit"]').textContent='Guardar cita';}
+  if(appointment){patientInput.value=appointment.patient;specialtySelect.value=appointment.specialty;updateDoctors(appointment.doctor);dateInput.value=appointment.date;timeInput.value=appointment.time;form.elements.notes.value=appointment.notes||'';document.querySelector('#appointment-dialog h2').textContent='Editar cita';document.querySelector('#appointment-dialog .dialog-description').textContent='Actualiza los datos de esta cita.';form.querySelector('button[type="submit"]').textContent='Guardar cambios';}
+  else{document.querySelector('#appointment-dialog h2').textContent='Agendar una cita';document.querySelector('#appointment-dialog .dialog-description').textContent='Completa los datos para reservar un horario de atención.';form.querySelector('button[type="submit"]').textContent='Guardar cita';}
   updateTimeMinimum();
+  updateAppointmentAvailability();
   dialog.showModal();form.elements.patient.focus();
 }
 function updateTimeMinimum() {
   const now = new Date();
   timeInput.min = dateInput.value === localDate(now) ? localTime(now) : '';
 }
-specialtySelect.addEventListener('change', () => updateDoctors());
-dateInput.addEventListener('change', updateTimeMinimum);
-form.addEventListener('input', () => { document.querySelector('#form-error').textContent = ''; });
-document.querySelector('#new-appointment').addEventListener('click',openDialog);
-document.querySelector('#empty-new').addEventListener('click',openDialog);
+function updateAppointmentAvailability() {
+  const availability = document.querySelector('#appointment-availability');
+  const submitButton = form.querySelector('button[type="submit"]');
+  const hasSchedule = specialtySelect.value && doctorSelect.value && dateInput.value && timeInput.value;
+  if (!hasSchedule || !currentUser) {
+    availability.textContent = 'Selecciona un profesional, fecha y hora para revisar la disponibilidad.';
+    availability.classList.remove('is-available', 'is-unavailable');
+    submitButton.disabled = false;
+    return;
+  }
+  const now = new Date();
+  if (dateInput.value < localDate(now) || (dateInput.value === localDate(now) && timeInput.value <= localTime(now))) {
+    availability.textContent = 'La fecha y hora deben ser futuras.';
+    availability.classList.remove('is-available');
+    availability.classList.add('is-unavailable');
+    submitButton.disabled = true;
+    return;
+  }
+  const conflict = hasScheduleConflict({
+    id: editingAppointmentId,
+    userEmail: currentUser.email,
+    doctor: doctorSelect.value,
+    date: dateInput.value,
+    time: timeInput.value,
+  });
+  availability.textContent = conflict
+    ? 'Este profesional ya tiene una cita en ese horario. Elige otro horario o profesional.'
+    : 'Horario disponible para reservar.';
+  availability.classList.toggle('is-available', !conflict);
+  availability.classList.toggle('is-unavailable', conflict);
+  submitButton.disabled = conflict;
+}
+specialtySelect.addEventListener('change', () => {
+  updateDoctors();
+  updateAppointmentAvailability();
+});
+dateInput.addEventListener('change', () => {
+  updateTimeMinimum();
+  updateAppointmentAvailability();
+});
+doctorSelect.addEventListener('change', updateAppointmentAvailability);
+timeInput.addEventListener('change', updateAppointmentAvailability);
+form.addEventListener('input', () => {
+  document.querySelector('#form-error').textContent = '';
+  updateAppointmentAvailability();
+});
+form.addEventListener('change', updateAppointmentAvailability);
+document.querySelector('#new-appointment').addEventListener('click', () => openDialog());
+document.querySelector('#empty-new').addEventListener('click', () => openDialog());
 document.querySelector('#empty-clear-search').addEventListener('click', () => {
   document.querySelector('#search').value = '';
   render();
@@ -310,9 +355,15 @@ form.addEventListener('submit', event => {
   const time = data.get('time');
   const selectedDoctors = doctorsBySpecialty[specialty];
   if (!patient) { error.textContent = 'Ingresa el nombre del paciente.'; patientInput.focus(); return; }
+  if (patient.length > 70) { error.textContent = 'El nombre del paciente no puede superar los 70 caracteres.'; patientInput.focus(); return; }
   if (!selectedDoctors) { error.textContent = 'Selecciona una especialidad válida.'; specialtySelect.focus(); return; }
   if (!selectedDoctors.includes(doctor)) { error.textContent = 'Selecciona un profesional de la especialidad elegida.'; doctorSelect.focus(); return; }
   if (!date || !time) { error.textContent = 'Completa la fecha y la hora de la cita.'; (!date ? dateInput : timeInput).focus(); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || localDate(new Date(`${date}T12:00:00`)) !== date || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+    error.textContent = 'Ingresa una fecha y hora válidas.';
+    dateInput.focus();
+    return;
+  }
   const now = new Date();
   const currentDate = localDate(now);
   if (date < currentDate || (date === currentDate && time <= localTime(now))) {

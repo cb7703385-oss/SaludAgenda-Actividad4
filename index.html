@@ -63,7 +63,38 @@
     </section>
     <footer>SaludAgenda <span>•</span> Prototipo académico — datos guardados en este navegador</footer>
   </main>
-  <dialog id="appointment-dialog"><form id="appointment-form" method="dialog"><div class="dialog-head"><div><p class="eyebrow">NUEVO REGISTRO</p><h2>Agendar una cita</h2></div><button class="icon-button" type="button" id="close-dialog" aria-label="Cerrar">×</button></div><label>Nombre del paciente<input name="patient" required maxlength="70" placeholder="Ej. Laura Gómez" /></label><div class="form-row"><label>Especialidad<select name="specialty" required><option value="">Seleccionar especialidad</option></select></label><label>Profesional<select name="doctor" required disabled><option value="">Primero elige especialidad</option></select></label></div><div class="form-row"><label>Fecha<input name="date" type="date" required /></label><label>Hora<input name="time" type="time" required /></label></div><label>Observaciones <span class="optional">(opcional)</span><textarea name="notes" rows="2" maxlength="180" placeholder="Información adicional"></textarea></label><p id="form-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-dialog">Cancelar</button><button type="submit" class="primary">Guardar cita</button></div></form></dialog>
+  <dialog id="appointment-dialog">
+    <form id="appointment-form" method="dialog">
+      <div class="dialog-head">
+        <div><p class="eyebrow">AGENDA MÉDICA</p><h2>Agendar una cita</h2><p class="dialog-description">Completa los datos para reservar un horario de atención.</p></div>
+        <button class="icon-button" type="button" id="close-dialog" aria-label="Cerrar">×</button>
+      </div>
+      <section class="appointment-form-section" aria-labelledby="patient-section-title">
+        <h3 id="patient-section-title">Datos del paciente</h3>
+        <label>Nombre completo<input name="patient" autocomplete="name" required maxlength="70" aria-describedby="patient-hint" placeholder="Ej. Laura Gómez" /><small id="patient-hint" class="field-hint">Escribe el nombre de la persona que recibirá la atención.</small></label>
+      </section>
+      <section class="appointment-form-section" aria-labelledby="professional-section-title">
+        <h3 id="professional-section-title">Profesional y especialidad</h3>
+        <div class="form-row">
+          <label>Especialidad<select name="specialty" required aria-describedby="specialty-hint"><option value="">Seleccionar especialidad</option></select><small id="specialty-hint" class="field-hint">La lista de profesionales depende de esta selección.</small></label>
+          <label>Profesional<select name="doctor" required disabled aria-describedby="doctor-hint"><option value="">Primero elige especialidad</option></select><small id="doctor-hint" class="field-hint">Selecciona quién realizará la consulta.</small></label>
+        </div>
+      </section>
+      <section class="appointment-form-section" aria-labelledby="schedule-section-title">
+        <h3 id="schedule-section-title">Fecha y hora</h3>
+        <div class="form-row">
+          <label>Fecha<input name="date" type="date" required aria-describedby="date-hint" /><small id="date-hint" class="field-hint">Solo se permiten fechas de hoy en adelante.</small></label>
+          <label>Hora<input name="time" type="time" required aria-describedby="time-hint" /><small id="time-hint" class="field-hint">La disponibilidad se verifica automáticamente.</small></label>
+        </div>
+        <p id="appointment-availability" class="appointment-availability" role="status" aria-live="polite">Selecciona un profesional, fecha y hora para revisar la disponibilidad.</p>
+      </section>
+      <section class="appointment-form-section">
+        <label>Observaciones <span class="optional">(opcional)</span><textarea name="notes" rows="2" maxlength="180" placeholder="Información adicional para la consulta"></textarea><small class="field-hint">Máximo 180 caracteres.</small></label>
+      </section>
+      <p id="form-error" class="form-error" role="alert" aria-live="assertive"></p>
+      <div class="dialog-actions"><button type="button" class="secondary" id="cancel-dialog">Cancelar</button><button type="submit" class="primary">Guardar cita</button></div>
+    </form>
+  </dialog>
   <dialog id="medical-record-dialog">
     <form id="medical-record-form" method="dialog">
       <div class="dialog-head"><div><p class="eyebrow">HISTORIA CLÍNICA</p><h2>Nuevo expediente médico</h2></div><button class="icon-button" type="button" id="close-medical-record-dialog" aria-label="Cerrar">×</button></div>
