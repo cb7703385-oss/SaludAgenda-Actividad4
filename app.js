@@ -107,6 +107,9 @@ const dialog = document.querySelector('#appointment-dialog');
 const medicalRecordForm = document.querySelector('#medical-record-form');
 const medicalRecordDialog = document.querySelector('#medical-record-dialog');
 const dateInput = form.elements.date;
+const timeInput = form.elements.time;
+const patientInput = form.elements.patient;
+const specialtySelect = form.elements.specialty;
 const doctorSelect = form.elements.doctor;
 const doctorsBySpecialty = {
   'Medicina general': ['Dra. Camila Ruiz', 'Dr. Andrés Herrera'],
@@ -117,7 +120,15 @@ const doctorsBySpecialty = {
 };
 const today = new Date();
 const localToday = new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-dateInput.min = localToday;
+const localDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const localTime = date => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
+Object.keys(doctorsBySpecialty).forEach(specialty => {
+  const option = document.createElement('option');
+  option.value = specialty;
+  option.textContent = specialty;
+  specialtySelect.append(option);
+});
 
 function loadAppointments() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
@@ -139,10 +150,10 @@ function loadMedicalRecords() {
 }
 let appointments = loadAppointments();
 let medicalRecords = loadMedicalRecords();
-const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(appointments));
 const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const dateLabel = value => new Intl.DateTimeFormat('es-CO',{day:'2-digit',month:'short',year:'numeric'}).format(new Date(`${value}T12:00:00`));
 const normalizeProfessional = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('es');
+const normalizeSearch = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('es');
 function hasScheduleConflict(candidate) {
   return appointments.some(appointment =>
     appointment.id !== candidate.id &&
@@ -166,18 +177,24 @@ function remainingLabel(appointment) {
 
 function render() {
   if (!currentUser) return;
-  const query = document.querySelector('#search').value.trim().toLocaleLowerCase('es');
+  const rawQuery = document.querySelector('#search').value;
+  const query = normalizeSearch(rawQuery);
   const ownAppointments = appointments.filter(a => a.userEmail === currentUser.email);
   const sorted = [...ownAppointments].sort((a,b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
-  const visible = sorted.filter(a => `${a.patient} ${a.specialty} ${a.doctor}`.toLocaleLowerCase('es').includes(query));
-  document.querySelector('#appointment-list').innerHTML = visible.map(a => `<tr>
+  const visible = sorted.filter(a => normalizeSearch(a.patient).includes(query));
+  document.querySelector('#appointment-list').innerHTML = visible.map(a => `<tr id="appointment-${escapeHtml(a.id)}" tabindex="-1">
     <td><strong>${escapeHtml(a.patient)}</strong><small>${escapeHtml(a.doctor)}</small></td>
     <td>${escapeHtml(a.specialty)}</td><td><strong>${dateLabel(a.date)}</strong><small>${escapeHtml(a.time)}</small></td>
     <td>${remainingLabel(a)}</td>
     <td><span class="badge ${a.status.toLowerCase()}">${a.status}</span></td>
     <td><div class="actions">${a.status==='Pendiente'?`<button class="row-action" data-action="confirm" data-id="${a.id}">Confirmar</button>`:''}<button class="row-action" data-action="edit" data-id="${a.id}">Editar</button><button class="row-action danger" data-action="cancel" data-id="${a.id}">Cancelar</button></div></td>
   </tr>`).join('');
-  document.querySelector('#empty').classList.toggle('visible', visible.length===0);
+  const empty = document.querySelector('#empty');
+  empty.classList.toggle('visible', visible.length === 0);
+  document.querySelector('#empty-title').textContent = query ? 'No se encontraron citas' : 'Aún no hay citas';
+  document.querySelector('#empty-description').textContent = query ? `No hay citas para “${rawQuery.trim()}”. Prueba con otro nombre.` : 'Registra la primera cita para comenzar.';
+  document.querySelector('#empty-new').hidden = Boolean(query);
+  document.querySelector('#empty-clear-search').hidden = !query;
   document.querySelector('#today-count').textContent=ownAppointments.filter(a=>a.date===localToday).length;
   document.querySelector('#pending-count').textContent=ownAppointments.filter(a=>a.status==='Pendiente').length;
   document.querySelector('#confirmed-count').textContent=ownAppointments.filter(a=>a.status==='Confirmada').length;
@@ -198,22 +215,45 @@ function render() {
   </article>`).join('');
   document.querySelector('#medical-record-empty').classList.toggle('visible', ownMedicalRecords.length === 0);
 }
-function updateDoctors(){
-  const specialty=form.elements.specialty.value;
+function updateDoctors(selectedDoctor = ''){
+  const specialty=specialtySelect.value;
   const doctors=doctorsBySpecialty[specialty]||[];
-  doctorSelect.innerHTML=doctors.length?'<option value="">Seleccionar profesional</option>'+doctors.map(name=>`<option>${escapeHtml(name)}</option>`).join(''):'<option value="">Primero elige especialidad</option>';
+  doctorSelect.replaceChildren();
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = doctors.length ? 'Seleccionar profesional' : 'Primero elige especialidad';
+  doctorSelect.append(placeholder);
+  doctors.forEach(name => {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    doctorSelect.append(option);
+  });
   doctorSelect.disabled=doctors.length===0;
+  doctorSelect.value = doctors.includes(selectedDoctor) ? selectedDoctor : '';
 }
 let editingAppointmentId = null;
 function openDialog(appointment = null){
-  document.querySelector('#form-error').textContent='';form.reset();editingAppointmentId=appointment?.id??null;updateDoctors();dateInput.min=localToday;
-  if(appointment){form.elements.patient.value=appointment.patient;form.elements.specialty.value=appointment.specialty;updateDoctors();form.elements.doctor.value=appointment.doctor;form.elements.date.value=appointment.date;form.elements.time.value=appointment.time;form.elements.notes.value=appointment.notes||'';document.querySelector('#appointment-dialog h2').textContent='Editar cita';form.querySelector('button[type="submit"]').textContent='Guardar cambios';}
+  document.querySelector('#form-error').textContent='';form.reset();editingAppointmentId=appointment?.id??null;updateDoctors();dateInput.min=localDate(new Date());
+  if(appointment){patientInput.value=appointment.patient;specialtySelect.value=appointment.specialty;updateDoctors(appointment.doctor);dateInput.value=appointment.date;timeInput.value=appointment.time;form.elements.notes.value=appointment.notes||'';document.querySelector('#appointment-dialog h2').textContent='Editar cita';form.querySelector('button[type="submit"]').textContent='Guardar cambios';}
   else{document.querySelector('#appointment-dialog h2').textContent='Agendar una cita';form.querySelector('button[type="submit"]').textContent='Guardar cita';}
+  updateTimeMinimum();
   dialog.showModal();form.elements.patient.focus();
 }
-form.elements.specialty.addEventListener('change',updateDoctors);
+function updateTimeMinimum() {
+  const now = new Date();
+  timeInput.min = dateInput.value === localDate(now) ? localTime(now) : '';
+}
+specialtySelect.addEventListener('change', () => updateDoctors());
+dateInput.addEventListener('change', updateTimeMinimum);
+form.addEventListener('input', () => { document.querySelector('#form-error').textContent = ''; });
 document.querySelector('#new-appointment').addEventListener('click',openDialog);
 document.querySelector('#empty-new').addEventListener('click',openDialog);
+document.querySelector('#empty-clear-search').addEventListener('click', () => {
+  document.querySelector('#search').value = '';
+  render();
+  document.querySelector('#search').focus();
+});
 document.querySelector('#close-dialog').addEventListener('click',()=>dialog.close());
 document.querySelector('#cancel-dialog').addEventListener('click',()=>dialog.close());
 dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close();});
@@ -257,21 +297,89 @@ medicalRecordForm.addEventListener('submit', event => {
   medicalRecordDialog.close();
 });
 document.querySelector('#search').addEventListener('input',render);
-form.addEventListener('submit',e=>{
-  e.preventDefault();
-  const data=new FormData(form);
-  const appointment={id:editingAppointmentId||crypto.randomUUID(),userEmail:currentUser.email,patient:data.get('patient').trim(),specialty:data.get('specialty'),doctor:data.get('doctor').trim(),date:data.get('date'),time:data.get('time'),notes:data.get('notes').trim(),status:'Pendiente'};
-  if(appointment.date<localToday){document.querySelector('#form-error').textContent='Selecciona una fecha de hoy o posterior.';return;}
-  if(hasScheduleConflict(appointment)){document.querySelector('#form-error').textContent='Ese profesional ya tiene una cita a esa hora.';return;}
-  if(editingAppointmentId)appointments=appointments.map(a=>a.id===editingAppointmentId&&a.userEmail===currentUser.email?{...a,...appointment}:a);else appointments.push(appointment);
-  editingAppointmentId=null;save();render();dialog.close();
+form.addEventListener('submit', event => {
+  event.preventDefault();
+  const wasEditing = Boolean(editingAppointmentId);
+  const error = document.querySelector('#form-error');
+  error.textContent = '';
+  const data = new FormData(form);
+  const patient = data.get('patient').trim();
+  const specialty = data.get('specialty');
+  const doctor = data.get('doctor');
+  const date = data.get('date');
+  const time = data.get('time');
+  const selectedDoctors = doctorsBySpecialty[specialty];
+  if (!patient) { error.textContent = 'Ingresa el nombre del paciente.'; patientInput.focus(); return; }
+  if (!selectedDoctors) { error.textContent = 'Selecciona una especialidad válida.'; specialtySelect.focus(); return; }
+  if (!selectedDoctors.includes(doctor)) { error.textContent = 'Selecciona un profesional de la especialidad elegida.'; doctorSelect.focus(); return; }
+  if (!date || !time) { error.textContent = 'Completa la fecha y la hora de la cita.'; (!date ? dateInput : timeInput).focus(); return; }
+  const now = new Date();
+  const currentDate = localDate(now);
+  if (date < currentDate || (date === currentDate && time <= localTime(now))) {
+    error.textContent = 'Selecciona una fecha y hora futuras.';
+    (date < currentDate ? dateInput : timeInput).focus();
+    return;
+  }
+  const appointment = {
+    id: editingAppointmentId || crypto.randomUUID(),
+    userEmail: currentUser.email,
+    patient,
+    specialty,
+    doctor,
+    date,
+    time,
+    notes: data.get('notes').trim(),
+    status: 'Pendiente',
+  };
+  if(hasScheduleConflict(appointment)){error.textContent='Ese profesional ya tiene una cita a esa hora.';doctorSelect.focus();return;}
+  let updatedAppointments;
+  if (editingAppointmentId) {
+    const existing = appointments.some(item => item.id === editingAppointmentId && item.userEmail === currentUser.email);
+    if (!existing) { error.textContent = 'No se encontró la cita que intentas editar. Actualiza la página e inténtalo de nuevo.'; return; }
+    updatedAppointments = appointments.map(item => item.id === editingAppointmentId && item.userEmail === currentUser.email ? { ...item, ...appointment } : item);
+  } else {
+    updatedAppointments = [...appointments, appointment];
+  }
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAppointments));
+  } catch (storageError) {
+    console.error('No se pudo guardar la cita.', storageError);
+    error.textContent = 'No se pudo guardar la cita. Verifica el espacio disponible en el navegador e inténtalo de nuevo.';
+    return;
+  }
+  appointments = updatedAppointments;
+  editingAppointmentId = null;
+  document.querySelector('#search').value = '';
+  document.querySelector('#appointment-feedback').textContent = `Cita ${wasEditing ? 'actualizada' : 'guardada'} para ${appointment.patient}.`;
+  dialog.close();
+  render();
+  setView('appointments');
+  history.replaceState(null, '', '#citas');
+  requestAnimationFrame(() => {
+    const row = document.querySelector(`#appointment-${CSS.escape(appointment.id)}`);
+    if (!row) return;
+    row.classList.add('appointment-saved');
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row.focus({ preventScroll: true });
+    window.setTimeout(() => row.classList.remove('appointment-saved'), 2200);
+  });
 });
 document.querySelector('#appointment-list').addEventListener('click',e=>{
   const button=e.target.closest('button[data-action]');if(!button)return;
   if(button.dataset.action==='edit'){const appointment=appointments.find(a=>a.id===button.dataset.id&&a.userEmail===currentUser.email);if(appointment)openDialog(appointment);return;}
-  if(button.dataset.action==='cancel')appointments=appointments.filter(a=>!(a.id===button.dataset.id&&a.userEmail===currentUser.email));
-  if(button.dataset.action==='confirm')appointments=appointments.map(a=>a.id===button.dataset.id&&a.userEmail===currentUser.email?{...a,status:'Confirmada'}:a);
-  save();render();
+  let updatedAppointments;
+  if(button.dataset.action==='cancel')updatedAppointments=appointments.filter(a=>!(a.id===button.dataset.id&&a.userEmail===currentUser.email));
+  if(button.dataset.action==='confirm')updatedAppointments=appointments.map(a=>a.id===button.dataset.id&&a.userEmail===currentUser.email?{...a,status:'Confirmada'}:a);
+  if (!updatedAppointments) return;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAppointments)); }
+  catch (storageError) {
+    console.error('No se pudo actualizar la cita.', storageError);
+    document.querySelector('#appointment-feedback').textContent = 'No se pudo actualizar la cita. Verifica el almacenamiento del navegador.';
+    return;
+  }
+  appointments = updatedAppointments;
+  document.querySelector('#appointment-feedback').textContent = button.dataset.action === 'cancel' ? 'Cita cancelada.' : 'Cita confirmada.';
+  render();
 });
 const savedEmail = localStorage.getItem(SESSION_KEY);
 const savedUser = getUsers().find(item => item.email === savedEmail);
