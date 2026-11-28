@@ -147,15 +147,19 @@ function remainingLabel(appointment) {
 function render() {
   if (!currentUser) return;
   const query = document.querySelector('#search').value.trim().toLocaleLowerCase('es');
+  const statusFilter = document.querySelector('#status-filter').value;
   const ownAppointments = appointments.filter(a => a.userEmail === currentUser.email);
   const sorted = [...ownAppointments].sort((a,b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
-  const visible = sorted.filter(a => `${a.patient} ${a.specialty} ${a.doctor}`.toLocaleLowerCase('es').includes(query));
+  const visible = sorted.filter(a =>
+    a.patient.toLocaleLowerCase('es').includes(query) &&
+    (!statusFilter || a.status === statusFilter)
+  );
   document.querySelector('#appointment-list').innerHTML = visible.map(a => `<tr>
     <td><strong>${escapeHtml(a.patient)}</strong><small>${escapeHtml(a.doctor)}</small></td>
     <td>${escapeHtml(a.specialty)}</td><td><strong>${dateLabel(a.date)}</strong><small>${escapeHtml(a.time)}</small></td>
     <td>${remainingLabel(a)}</td>
     <td><span class="badge ${a.status.toLowerCase()}">${a.status}</span></td>
-    <td><div class="actions">${a.status==='Pendiente'?`<button class="row-action" data-action="confirm" data-id="${a.id}">Confirmar</button>`:''}<button class="row-action" data-action="edit" data-id="${a.id}">Editar</button><button class="row-action danger" data-action="cancel" data-id="${a.id}">Cancelar</button></div></td>
+    <td><div class="actions"><button class="row-action" data-action="view" data-id="${a.id}">Ver</button>${a.status==='Pendiente'?`<button class="row-action" data-action="confirm" data-id="${a.id}">Confirmar</button>`:''}<button class="row-action" data-action="edit" data-id="${a.id}">Editar</button><button class="row-action danger" data-action="cancel" data-id="${a.id}">Cancelar</button></div></td>
   </tr>`).join('');
   document.querySelector('#empty').classList.toggle('visible', visible.length===0);
   document.querySelector('#today-count').textContent=ownAppointments.filter(a=>a.date===localToday).length;
@@ -167,10 +171,15 @@ function updateDoctors(){
   const doctors=doctorsBySpecialty[specialty]||[];
   doctorSelect.innerHTML=doctors.length?'<option value="">Seleccionar profesional</option>'+doctors.map(name=>`<option>${escapeHtml(name)}</option>`).join(''):'<option value="">Primero elige especialidad</option>';
   doctorSelect.disabled=doctors.length===0;
+  clearFieldError('specialty');
+  clearFieldError('doctor');
 }
 let editingAppointmentId = null;
 function openDialog(appointment = null){
-  document.querySelector('#form-error').textContent='';form.reset();editingAppointmentId=appointment?.id??null;updateDoctors();dateInput.min=localToday;
+  document.querySelector('#form-error').textContent='';
+  form.reset();
+  ['patient','specialty','doctor','date','time'].forEach(clearFieldError);
+  editingAppointmentId=appointment?.id??null;updateDoctors();dateInput.min=localToday;
   if(appointment){form.elements.patient.value=appointment.patient;form.elements.specialty.value=appointment.specialty;updateDoctors();form.elements.doctor.value=appointment.doctor;form.elements.date.value=appointment.date;form.elements.time.value=appointment.time;form.elements.notes.value=appointment.notes||'';document.querySelector('#appointment-dialog h2').textContent='Editar cita';form.querySelector('button[type="submit"]').textContent='Guardar cambios';}
   else{document.querySelector('#appointment-dialog h2').textContent='Agendar una cita';form.querySelector('button[type="submit"]').textContent='Guardar cita';}
   dialog.showModal();form.elements.patient.focus();
@@ -181,23 +190,101 @@ document.querySelector('#empty-new').addEventListener('click',openDialog);
 document.querySelector('#close-dialog').addEventListener('click',()=>dialog.close());
 document.querySelector('#cancel-dialog').addEventListener('click',()=>dialog.close());
 dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close();});
-document.querySelector('#search').addEventListener('input',render);
+const searchInput=document.querySelector('#search');
+const clearSearchButton=document.querySelector('#clear-search');
+searchInput.addEventListener('input',()=>{clearSearchButton.hidden=!searchInput.value;render();});
+clearSearchButton.addEventListener('click',()=>{searchInput.value='';clearSearchButton.hidden=true;searchInput.focus();render();});
+document.querySelector('#status-filter').addEventListener('change',render);
+
+function setFieldError(name,message){
+  const input=form.elements[name];
+  const error=form.querySelector(`[data-error-for="${name}"]`);
+  if(input)input.classList.toggle('field-invalid',Boolean(message));
+  if(error)error.textContent=message||'';
+}
+function clearFieldError(name){setFieldError(name,'');}
+['patient','specialty','doctor','date','time'].forEach(name=>{
+  const input=form.elements[name];
+  if(input)input.addEventListener(input.tagName==='SELECT'||input.type==='date'||input.type==='time'?'change':'input',()=>clearFieldError(name));
+});
+
+function validateAppointment(appointment){
+  ['patient','specialty','doctor','date','time'].forEach(clearFieldError);
+  let valid=true;
+  if(appointment.patient.length<3){setFieldError('patient','Ingresa al menos 3 caracteres.');valid=false;}
+  if(!appointment.specialty){setFieldError('specialty','Selecciona una especialidad.');valid=false;}
+  if(!appointment.doctor){setFieldError('doctor','Selecciona un profesional.');valid=false;}
+  if(!appointment.date){setFieldError('date','Selecciona una fecha.');valid=false;}
+  else if(appointment.date<localToday){setFieldError('date','La fecha debe ser hoy o posterior.');valid=false;}
+  if(!appointment.time){setFieldError('time','Selecciona una hora.');valid=false;}
+  else if(appointment.date===localToday){
+    const selected=new Date(`${appointment.date}T${appointment.time}:00`).getTime();
+    if(selected<=Date.now()){setFieldError('time','La hora debe ser posterior a la actual.');valid=false;}
+  }
+  return valid;
+}
+
+let toastTimer;
+function showToast(message){
+  const toast=document.querySelector('#toast');
+  toast.textContent=message;
+  toast.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>toast.classList.remove('visible'),3000);
+}
+function showAppointmentDetails(appointment){
+  document.querySelector('#appointment-details-content').innerHTML=`
+    <div class="details-grid">
+      <div class="detail-item"><span>Paciente</span><strong>${escapeHtml(appointment.patient)}</strong></div>
+      <div class="detail-item"><span>Estado</span><strong>${escapeHtml(appointment.status)}</strong></div>
+      <div class="detail-item"><span>Especialidad</span><strong>${escapeHtml(appointment.specialty)}</strong></div>
+      <div class="detail-item"><span>Profesional</span><strong>${escapeHtml(appointment.doctor)}</strong></div>
+      <div class="detail-item"><span>Fecha</span><strong>${dateLabel(appointment.date)}</strong></div>
+      <div class="detail-item"><span>Hora</span><strong>${escapeHtml(appointment.time)}</strong></div>
+      <div class="detail-item full"><span>Observaciones</span><strong>${appointment.notes?escapeHtml(appointment.notes):'Sin observaciones'}</strong></div>
+    </div>`;
+  document.querySelector('#appointment-details').showModal();
+}
 form.addEventListener('submit',e=>{
   e.preventDefault();
   const data=new FormData(form);
-  const appointment={id:editingAppointmentId||crypto.randomUUID(),userEmail:currentUser.email,patient:data.get('patient').trim(),specialty:data.get('specialty'),doctor:data.get('doctor').trim(),date:data.get('date'),time:data.get('time'),notes:data.get('notes').trim(),status:'Pendiente'};
-  if(appointment.date<localToday){document.querySelector('#form-error').textContent='Selecciona una fecha de hoy o posterior.';return;}
-  if(hasScheduleConflict(appointment)){document.querySelector('#form-error').textContent='Ese profesional ya tiene una cita a esa hora.';return;}
-  if(editingAppointmentId)appointments=appointments.map(a=>a.id===editingAppointmentId&&a.userEmail===currentUser.email?{...a,...appointment}:a);else appointments.push(appointment);
-  editingAppointmentId=null;save();render();dialog.close();
+  const existing=editingAppointmentId?appointments.find(a=>a.id===editingAppointmentId&&a.userEmail===currentUser.email):null;
+  const appointment={id:editingAppointmentId||crypto.randomUUID(),userEmail:currentUser.email,patient:data.get('patient').trim(),specialty:data.get('specialty'),doctor:data.get('doctor').trim(),date:data.get('date'),time:data.get('time'),notes:data.get('notes').trim(),status:existing?.status||'Pendiente'};
+  document.querySelector('#form-error').textContent='';
+  if(!validateAppointment(appointment)){
+    document.querySelector('#form-error').textContent='Revisa los campos marcados antes de guardar.';
+    return;
+  }
+  if(hasScheduleConflict(appointment)){setFieldError('time','Ese profesional ya tiene una cita a esta hora.');document.querySelector('#form-error').textContent='Ese profesional ya tiene una cita a esa hora.';return;}
+  const wasEditing=Boolean(editingAppointmentId);
+  if(wasEditing)appointments=appointments.map(a=>a.id===editingAppointmentId&&a.userEmail===currentUser.email?{...a,...appointment}:a);
+  else appointments.push(appointment);
+  editingAppointmentId=null;
+  save();
+  render();
+  dialog.close();
+  showToast(wasEditing?'Los datos de la cita fueron actualizados.':'Cita registrada correctamente.');
+  showAppointmentDetails(appointment);
 });
 document.querySelector('#appointment-list').addEventListener('click',e=>{
   const button=e.target.closest('button[data-action]');if(!button)return;
+  if(button.dataset.action==='view'){const appointment=appointments.find(a=>a.id===button.dataset.id&&a.userEmail===currentUser.email);if(appointment)showAppointmentDetails(appointment);return;}
   if(button.dataset.action==='edit'){const appointment=appointments.find(a=>a.id===button.dataset.id&&a.userEmail===currentUser.email);if(appointment)openDialog(appointment);return;}
-  if(button.dataset.action==='cancel')appointments=appointments.filter(a=>!(a.id===button.dataset.id&&a.userEmail===currentUser.email));
+  if(button.dataset.action==='cancel'){
+    const appointment=appointments.find(a=>a.id===button.dataset.id&&a.userEmail===currentUser.email);
+    if(!appointment||!window.confirm(`¿Cancelar la cita de ${appointment.patient}?`))return;
+    appointments=appointments.filter(a=>!(a.id===button.dataset.id&&a.userEmail===currentUser.email));
+    showToast('Cita cancelada.');
+  }
   if(button.dataset.action==='confirm')appointments=appointments.map(a=>a.id===button.dataset.id&&a.userEmail===currentUser.email?{...a,status:'Confirmada'}:a);
+  if(button.dataset.action==='confirm')showToast('Cita confirmada.');
   save();render();
 });
+const detailsDialog=document.querySelector('#appointment-details');
+document.querySelector('#close-details').addEventListener('click',()=>detailsDialog.close());
+document.querySelector('#close-details-action').addEventListener('click',()=>detailsDialog.close());
+detailsDialog.addEventListener('click',e=>{if(e.target===detailsDialog)detailsDialog.close();});
+document.querySelector('#print-appointment').addEventListener('click',()=>window.print());
 const savedEmail = localStorage.getItem(SESSION_KEY);
 const savedUser = getUsers().find(item => item.email === savedEmail);
 if (savedUser) showApp(savedUser);
